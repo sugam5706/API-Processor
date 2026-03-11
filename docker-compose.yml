@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: api_processor_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api_server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: api_processor_server
+    command: python api_server.py
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - API_SERVER_PORT=8000
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    networks:
+      - api_processor_network
+
+  processor_1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: api_processor_worker_1
+    command: python processor.py worker-1
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    networks:
+      - api_processor_network
+
+  processor_2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: api_processor_worker_2
+    command: python processor.py worker-2
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    networks:
+      - api_processor_network
+
+  response_handler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: api_processor_handler
+    command: python response_handler.py
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    networks:
+      - api_processor_network
+
+volumes:
+  redis_data:
+
+networks:
+  api_processor_network:
+    driver: bridge
